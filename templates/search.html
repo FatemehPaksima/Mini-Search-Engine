@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="fa">
+  <head>
+    <meta charset="UTF-8" />
+    <title>موتور جستجوی ساده</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        direction: rtl; /* متون از راست به چپ */
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        background-color: #f9f9f9;
+      }
+      .container {
+        width: 90%;
+        margin: 0 auto;
+        padding: 20px;
+        background: #fff;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        margin-top: 50px;
+        position: relative; /* برای قرار دادن پیشنهادات */
+      }
+      h1 {
+        text-align: center;
+        color: #444;
+      }
+      form {
+        text-align: center;
+        margin-bottom: 20px;
+        position: relative; /* برای قرار دادن پیشنهادات */
+      }
+      input[type="text"],
+      input[type="number"] {
+        width: 400px;
+        padding: 12px;
+        font-size: 16px;
+        margin-right: 5px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        background-color: #f1f1f1;
+      }
+      input[type="number"] {
+        width: 60px;
+      }
+      button {
+        padding: 12px 18px;
+        font-size: 16px;
+        border: none;
+        border-radius: 4px;
+        background-color: #4caf50;
+        color: white;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+      }
+      button:hover {
+        background-color: #006622;
+      }
+      ul {
+        list-style-type: none;
+        padding: 0;
+      }
+      li {
+        margin: 15px 0;
+        background: #f8f8f8;
+        padding: 15px;
+        border-radius: 4px;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+      }
+      a {
+        text-decoration: none;
+        color: #0056b3;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .results {
+        margin-top: 20px;
+      }
+      .result-item {
+        margin-bottom: 20px;
+      }
+      .result-url {
+        font-size: 0.7em;
+        color: #39ac39;
+      }
+      .result-title {
+        font-size: 1.4em;
+        color: #009999;
+        margin: 5px 0;
+      }
+      .result-snippet {
+        font-size: 0.95em;
+        color: #878778;
+      }
+      .error {
+        color: red;
+        text-align: center;
+        margin-bottom: 20px;
+      }
+      .corrections {
+        margin-top: 20px;
+        padding: 10px;
+        background: #f0f0f0;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+      }
+      .corrections h3 {
+        margin: 0 0 10px 0;
+      }
+      .corrections a {
+        color: #28a745;
+      }
+      #autocomplete-suggestions {
+        background: #fff;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        position: absolute;
+        width: 100%;
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 1000;
+        display: none; /* پیش‌فرض: مخفی */
+        top: 100%; /* قرارگیری زیر فرم */
+      }
+      #autocomplete-suggestions ul {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+      }
+      #autocomplete-suggestions li {
+        padding: 10px;
+        cursor: pointer;
+      }
+      #autocomplete-suggestions li.highlighted {
+        background-color: #f1f1f1;
+      }
+    </style>
+    <script>
+      let currentFocus = -1;
+      
+      function getAutocompleteSuggestions(query) {
+        if (query.length < 2) {
+          document.getElementById("autocomplete-suggestions").style.display =
+            "none";
+          return;
+        }
+        fetch(`/autocomplete?query=${query}`)
+          .then((response) => response.json())
+          .then((data) => {
+            const suggestionsBox = document.getElementById(
+              "autocomplete-suggestions"
+            );
+            if (data.length === 0) {
+              suggestionsBox.style.display = "none";
+            } else {
+              suggestionsBox.style.display = "block";
+              suggestionsBox.innerHTML =
+                "<ul>" +
+                data
+                  .map(
+                    (item) =>
+                      `<li onclick="selectAutocompleteSuggestion('${item.suggestion}', '${item.type}')">${item.suggestion}</li>`
+                  )
+                  .join("") +
+                "</ul>";
+              currentFocus = -1; // تنظیم مجدد موقعیت
+            }
+          });
+      }
+
+      function selectAutocompleteSuggestion(suggestion, type) {
+        const queryInput = document.querySelector('input[name="query"]');
+        if (type === "query") {
+          queryInput.value = suggestion; // جایگزینی کل کوئری
+        } else if (type === "word") {
+          const words = queryInput.value.split(" ");
+          words[words.length - 1] = suggestion; // جایگزینی کلمه آخر
+          queryInput.value = words.join(" ");
+        }
+        document.getElementById("autocomplete-suggestions").style.display =
+          "none";
+      }
+
+      function addActive(items) {
+        if (!items) return false;
+        removeActive(items);
+        if (currentFocus >= items.length) currentFocus = 0;
+        if (currentFocus < 0) currentFocus = items.length - 1;
+        items[currentFocus].classList.add("highlighted");
+        // Scroll into view
+        items[currentFocus].scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
+      }
+
+      function removeActive(items) {
+        for (let i = 0; i < items.length; i++) {
+          items[i].classList.remove("highlighted");
+        }
+      }
+
+      function keydownHandler(e) {
+        const suggestionsBox = document.getElementById(
+          "autocomplete-suggestions"
+        );
+        if (!suggestionsBox) return;
+        let items = suggestionsBox.getElementsByTagName("li");
+        if (e.keyCode === 40) {
+          // کلید پایین
+          currentFocus++;
+          addActive(items);
+        } else if (e.keyCode === 38) {
+          // کلید بالا
+          currentFocus--;
+          addActive(items);
+        } else if (e.keyCode === 13) {
+          // کلید اینتر
+          e.preventDefault();
+          if (currentFocus > -1) {
+            if (items) items[currentFocus].click();
+          } else {
+            document.querySelector("form").submit(); // زمانی که هیچ گزینه‌ای انتخاب نشده، فرم ارسال شود
+          }
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const queryInput = document.querySelector('input[name="query"]');
+        queryInput.addEventListener("input", () => {
+          getAutocompleteSuggestions(queryInput.value);
+        });
+        queryInput.addEventListener("keydown", keydownHandler);
+        document.addEventListener("click", (event) => {
+          if (
+            !event.target.closest("#autocomplete-suggestions") &&
+            !event.target.closest('input[name="query"]')
+          ) {
+            document.getElementById("autocomplete-suggestions").style.display =
+              "none";
+          }
+        });
+      });
+    </script>
+  </head>
+  <body>
+    <div class="container">
+      <h1>جستجوی صفحات وب</h1>
+      <form method="post" action="/">
+        <input
+          type="text"
+          name="query"
+          placeholder="جستجو..."
+          required
+          value="{{ query }}"
+        />
+        <input
+          type="number"
+          name="size"
+          value="{{ request.form.get('size', 10) }}"
+          min="1"
+          max="100"
+        />
+        <button type="submit">جستجو</button>
+        <div id="autocomplete-suggestions"></div>
+      </form>
+
+      {% if error %}
+      <div class="error">{{ error }}</div>
+      {% endif %} {% if corrections %}
+      <div class="corrections">
+        <h3>آیا منظور شما موارد زیر است:</h3>
+        <ul>
+          {% for suggestion in corrections %}
+          <li>
+            <a href="{{ url_for('suggest', query=suggestion) }}"
+              >{{ suggestion }}</a
+            >
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %} {% if results %}
+      <h2>نتایج:</h2>
+      <p>
+        تعداد نتایج یافت شده: {{ total_results }} در {{ search_time | round(2)
+        }} ثانیه
+      </p>
+
+      <ul class="results">
+        {% for result in results %}
+        <li class="result-item">
+          <div class="result-url">{{ result.url }}</div>
+          <a href="{{ result.url }}" class="result-title">{{ result.title }}</a>
+          <div class="result-snippet">{{ result.snippet }}...</div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p>نتیجه‌ای یافت نشد.</p>
+      {% endif %}
+    </div>
+  </body>
+</html>
